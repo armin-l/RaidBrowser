@@ -1247,6 +1247,10 @@ function RaidBrowser:OnEnable()
 		};
 	end
 
+	if RaidBrowserCharacterUseShortSpecNames == nil then
+		RaidBrowserCharacterUseShortSpecNames = false;
+	end
+
 	-- LFM messages expire after 60 seconds
 	RaidBrowser.expiry_time = 60;
 
@@ -1257,6 +1261,7 @@ function RaidBrowser:OnEnable()
 	end
 
 	RaidBrowser.check_button()
+	RaidBrowser.gui.raidset.initialize();
 end
 
 function RaidBrowser:OnDisable()

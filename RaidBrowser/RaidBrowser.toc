@@ -3,7 +3,7 @@
 ## Version: v1.4.0-DEV
 ## Notes: A raid finder that parses chat channel text and displays any found raids in the raid browser LFR frame.
 ## Author: Act/Horsebreed@Warmane
-## SavedVariablesPerCharacter: RaidBrowserCharacterRaidsets, RaidBrowserCharacterCurrentRaidset
+## SavedVariablesPerCharacter: RaidBrowserCharacterRaidsets, RaidBrowserCharacterCurrentRaidset, RaidBrowserCharacterUseShortSpecNames
 ## OptionalDeps: GearScoreLite
 ## X-Embeds: Ace3
 

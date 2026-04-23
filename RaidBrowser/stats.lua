@@ -219,6 +219,61 @@ local spec_names = {
 	}
 }
 
+local spec_name_lookup = {}
+for key, label in pairs(spec_names.full) do
+	spec_name_lookup[label] = key
+end
+for key, label in pairs(spec_names.short) do
+	spec_name_lookup[label] = key
+end
+
+local function use_short_spec_names()
+	return RaidBrowserCharacterUseShortSpecNames == true
+end
+
+local function get_readable_spec_name(spec_key)
+	if use_short_spec_names() then
+		return spec_names.short[spec_key] or spec_key
+	end
+	return spec_names.full[spec_key] or spec_key
+end
+
+local function normalize_saved_spec_name(spec)
+	if not spec then return spec end
+
+	local base, suffix = string.match(spec, "^(.-)%s*(%b())$")
+	if suffix ~= "(Tank)" and suffix ~= "(DPS)" then
+		base = spec
+		suffix = ""
+	end
+
+	local key = spec_name_lookup[base]
+	if not key then
+		return spec
+	end
+
+	return get_readable_spec_name(key) .. suffix
+end
+
+function RaidBrowser.stats.use_short_spec_names()
+	return use_short_spec_names()
+end
+
+function RaidBrowser.stats.set_use_short_spec_names(enabled)
+	RaidBrowserCharacterUseShortSpecNames = enabled == true
+end
+
+function RaidBrowser.stats.refresh_saved_raidset_spec_names()
+	if not RaidBrowserCharacterRaidsets then return end
+
+	for _, set in ipairs({ "Primary", "Secondary" }) do
+		local raidset = RaidBrowserCharacterRaidsets[set]
+		if raidset and raidset.spec then
+			raidset.spec = normalize_saved_spec_name(raidset.spec)
+		end
+	end
+end
+
 ---@param raid string The name of the achievement ids table
 ---@nodiscard
 local function find_best_achievement(raid)
@@ -280,8 +335,7 @@ function RaidBrowser.stats.active_spec()
 	local _, _, _, spec_name = GetTalentTabInfo(active_tab);
 	local _, class = UnitClass("player");
 
-	-- TODO: make config to toggle using full or short spec names
-	local readable_spec_name = spec_names["short"][spec_name] or spec_name;
+	local readable_spec_name = get_readable_spec_name(spec_name)
 	
 	-- If we're a feral druid, then we need to distinguish between tank and cat feral.
 	if spec_name == 'DruidFeralCombat' then
@@ -395,7 +449,7 @@ function RaidBrowser.stats.current_raidset()
 	return RaidBrowser.stats.get_raidset(RaidBrowserCharacterCurrentRaidset);
 end
 
----@param set 'Active' | 'Primary' | 'Secondary'
+---@param set 'Active' | 'Primary' | 'Secondary' | 'Both'
 function RaidBrowser.stats.select_current_raidset(set)
 	RaidBrowserCharacterCurrentRaidset = set;
 end

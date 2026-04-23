@@ -4,7 +4,17 @@ local frame = CreateFrame("Frame", "RaidBrowserRaidSetMenu", LFRBrowseFrame, "UI
 UIDropDownMenu_SetWidth(RaidBrowserRaidSetMenu, 150)
 frame:SetWidth(90);
 
+---@type 'Active'|'Primary'|'Secondary'|'Both'|nil
 local current_selection = nil;
+
+---@param selection any
+---@return 'Active'|'Primary'|'Secondary'|'Both'
+local function normalize_selection(selection)
+	if selection == 'Active' or selection == 'Primary' or selection == 'Secondary' or selection == 'Both' then
+		return selection
+	end
+	return 'Active'
+end
 
 ---@return boolean
 local function is_active_selected(_)
@@ -25,7 +35,7 @@ local function is_both_selected(option)
 	return ('Both' == current_selection);
 end
 
----@param selection 'Active'|'Primary'|'Secondary'
+---@param selection 'Active'|'Primary'|'Secondary'|'Both'
 local function set_selection(selection)
 	local text = '';
 
@@ -180,11 +190,20 @@ local function on_raidset_save()
 
 	---@diagnostic disable-next-line: undefined-field
 	RaidBrowser:Print('Raidset saved: ' .. spec .. ' ' .. gs .. 'gs');
-	set_selection(current_selection);
+	if current_selection then
+		set_selection(current_selection)
+	else
+		set_selection('Active')
+	end
 end
 
 function RaidBrowser.gui.raidset.initialize()
-	set_selection(RaidBrowserCharacterCurrentRaidset);
+	local selection = normalize_selection(RaidBrowserCharacterCurrentRaidset)
+	set_selection(selection)
+	if short_spec_check then
+		local use_short_names = RaidBrowser.stats.use_short_spec_names and RaidBrowser.stats.use_short_spec_names() or false
+		short_spec_check:SetChecked(use_short_names)
+	end
 end
 
 local function check_button(button)
@@ -234,4 +253,29 @@ button:SetText("Save Raid Gear");
 button:SetWidth(110);
 button:SetScript("OnClick", on_raidset_save);
 button:Show();
+
+-- Create short spec names checkbox
+short_spec_check = CreateFrame("CheckButton", "RaidBrowserRaidSetShortSpecCheckButton", LFRBrowseFrame, "UICheckButtonTemplate")
+short_spec_check:SetPoint("CENTER", LFRBrowseFrame, "CENTER", -137, -169)
+short_spec_check:SetScript("OnClick", function(self)
+	local enabled = self:GetChecked() ~= nil;
+	if RaidBrowser.stats.set_use_short_spec_names then
+		RaidBrowser.stats.set_use_short_spec_names(enabled)
+	end
+	if RaidBrowser.stats.refresh_saved_raidset_spec_names then
+		RaidBrowser.stats.refresh_saved_raidset_spec_names()
+	end
+
+	if current_selection then
+		set_selection(current_selection);
+	end
+
+	---@diagnostic disable-next-line: undefined-field
+	RaidBrowser:Print('Short spec names: ' .. (enabled and 'enabled' or 'disabled'));
+end)
+
+local short_spec_label = _G[short_spec_check:GetName() .. "Text"]
+if short_spec_label then
+	short_spec_label:SetText("Use short spec names")
+end
 check_button(button);

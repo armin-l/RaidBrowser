@@ -232,6 +232,10 @@ local function use_short_spec_names()
 end
 
 local function get_readable_spec_name(spec_key)
+	if spec_key == nil then
+		return "Unknown Spec"
+	end
+
 	if use_short_spec_names() then
 		return spec_names.short[spec_key] or spec_key
 	end
@@ -327,7 +331,7 @@ end
 function RaidBrowser.stats.active_spec_index()
 	local indices = std.algorithm.transform({ 1, 2, 3 }, GetTalentTabPoints)
 	local i, _ = std.algorithm.max_of(indices);
-	return i;
+	return i or 1;
 end
 
 function RaidBrowser.stats.active_spec()
@@ -342,6 +346,7 @@ function RaidBrowser.stats.active_spec()
 		local protector_of_pack_talent = 22;
 		local thick_hide_talent = 5;
 		local _, _, _, _, points = GetTalentInfo(active_tab, thick_hide_talent)
+		points = tonumber(points) or 0
 		if points > 1 then
 			return readable_spec_name .. ' (Tank)'
 		else
@@ -355,6 +360,8 @@ function RaidBrowser.stats.active_spec()
 		local blade_barrier_talent = 3;
 		local _, _, _, _, points = GetTalentInfo(2, toughness_talent)
 		local _, _, _, _, points2 = GetTalentInfo(1, blade_barrier_talent)
+		points = tonumber(points) or 0
+		points2 = tonumber(points2) or 0
 		if points > 3 and points2 > 3 then
 			return readable_spec_name .. ' (Tank)'
 		else

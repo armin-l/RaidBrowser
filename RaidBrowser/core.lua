@@ -547,7 +547,7 @@ local raid_list = {
 
 	{
 		name = 'hyjal25',
-		instace_name = 'The Battle For Mount Hyjal',
+		instance_name = 'The Battle For Mount Hyjal',
 		size = 25,
 		patterns = {
 			'mount' .. csep .. 'hyjal',
@@ -1257,16 +1257,17 @@ function RaidBrowser:OnEnable()
 	RaidBrowser.lfm_messages = {}
 	RaidBrowser.timer = RaidBrowser.set_timer(10, refresh_lfm_messages, true)
 	for channel, _ in pairs(RaidBrowserLfmChannelListeners) do
-		table.insert(channel_listeners, RaidBrowser.add_event_listener(channel, event_handler))
+		channel_listeners[channel] = RaidBrowser.add_event_listener(channel, event_handler)
 	end
 
-	RaidBrowser.check_button()
+	-- Restores the saved raidset selection and syncs the save button with it.
 	RaidBrowser.gui.raidset.initialize();
 end
 
 function RaidBrowser:OnDisable()
-	for channel, listener in pairs(RaidBrowserLfmChannelListeners) do
+	for channel, listener in pairs(channel_listeners) do
 		RaidBrowser.remove_event_listener(channel, listener)
+		channel_listeners[channel] = nil
 	end
 
 	RaidBrowser.kill_timer(RaidBrowser.timer)

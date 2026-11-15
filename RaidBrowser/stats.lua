@@ -456,6 +456,17 @@ function RaidBrowser.stats.current_raidset()
 	return RaidBrowser.stats.get_raidset(RaidBrowserCharacterCurrentRaidset);
 end
 
+---Gearscore of the currently selected raidset (the higher one for "Both").
+---@return number? nil if no gearscore is known (e.g. GearScoreLite not installed)
+function RaidBrowser.stats.player_gs()
+	local _, gs1, _, gs2 = RaidBrowser.stats.current_raidset();
+	gs1, gs2 = tonumber(gs1), tonumber(gs2);
+	if gs1 and gs2 then
+		return math.max(gs1, gs2);
+	end
+	return gs1 or gs2;
+end
+
 ---@param set 'Active' | 'Primary' | 'Secondary' | 'Both'
 function RaidBrowser.stats.select_current_raidset(set)
 	RaidBrowserCharacterCurrentRaidset = set;
@@ -476,7 +487,7 @@ end
 ---@return string
 ---@nodiscard
 function RaidBrowser.stats.build_join_message(raid_name)
-	local message = 'inv for ' .. raid_name .. " - ";
+	local message = 'inv for ' .. RaidBrowser.get_display_raid_name(raid_name) .. " - ";
 	local class = UnitClass("player");
 	
 	-- GearScore is optional: without it, still send the spec.

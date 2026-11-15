@@ -18,7 +18,13 @@ No longer will you join a raid and embarrass yourself upon realizing that you've
 - Join / Double click: After clicking on an entry in the raid browser, send a formatted message to the raid host with your GS, class, spec, and highest achievement obtained for that raid.
 - Tooltip Hover: Hovering your mouse over an entry in the raid browser shows the original chat message, as well as how long it's been since the message was sent.
 - Create primary and secondary raid sets (Ex: Elemental 5641gs) for use in join messages. In the given example, your message will be formatted in a manner similar to "inv 5641gs Elemental Shaman <possible achievement link>". If you are pvping in WG while searching for raids, the addon will send information from the currently selected raidset to the raid host instead of your pvp (spec, gs).
-- Raid hosts that do not send a message after 1-2 minutes will have their entry expire in the raid browser. This ensures that the raid browser does not become cluttered.
+- Raid hosts that do not send a message after 2 minutes (configurable with `/rb expiry`) will have their entry expire in the raid browser. This ensures that the raid browser does not become cluttered.
+- Readable raid names (e.g. "ICC 25 HC", "Naxx 10 Weekly"), newest raids listed first.
+- The GS column is green if your gearscore meets the requirement and red if it does not (requires GearScoreLite).
+- Hosts you already whispered are greyed out, and whispering the same host again within 60 seconds is blocked.
+- Filter button: show only raids that need your role, hide raids you are saved for or whose GS requirement is above yours, and choose which raids to show.
+- Right-click a raid to whisper the host or hide all raids from that player.
+- Optional notifications: get a chat message (with a sound) when a new raid matching your filters shows up while the raid browser is closed.
   
 # How to Download
 
@@ -30,6 +36,13 @@ When ingame, type /rb to activate the raid browser UI. Alternatively, the interf
 1. Open the social menu (Press O),
 2. Select the "Raid" tab,
 3. Click "Open Raid Browser"
+
+## Commands
+- `/rb` - open or close the raid browser
+- `/rb notify` - turn new-raid notifications on or off (`/rb notify on|off`)
+- `/rb expiry <seconds>` - how long raids stay listed after their last message (30-600, default 120)
+- `/rb unhide` - show all players you hid via right-click again
+- `/rb help` - list the commands
 
 It is important to join the global channel in order for the addon to find raids. If you don't want your chat window to be filled with global chatter, you can simply hide the global channel from your default chat window. 
 

@@ -1181,6 +1181,60 @@ function RaidBrowser.get_short_raid_name(raid_name)
 	return string.gsub(raid_name, '[1|2][0|5](%w*)', '');
 end
 
+-- Readable short names for the raid codes in raid_list, e.g. icc25hc -> "ICC 25 HC".
+local raid_display_bases = {
+	['icc'] = 'ICC',
+	['toc'] = 'ToC',
+	['rs'] = 'RS',
+	['voa'] = 'VoA',
+	['ulduar'] = 'Uld',
+	['os'] = 'OS',
+	['naxx'] = 'Naxx',
+	['eoe'] = 'EoE',
+	['onyxia'] = 'Ony',
+	['hyjal'] = 'Hyjal',
+	['zul\'aman'] = 'ZA',
+	['tempest keep'] = 'TK',
+	['karazhan'] = 'Kara',
+	['mag\'s lair'] = 'Mag',
+	['gruul\'s lair'] = 'Gruul',
+	['bwl'] = 'BWL',
+	['molten core'] = 'MC',
+	['black temple'] = 'BT',
+	['sunwell'] = 'SWP',
+	['ssc'] = 'SSC',
+	['aq'] = 'AQ',
+}
+
+local raid_display_suffixes = {
+	[''] = '',
+	['nm'] = '',
+	['hc'] = ' HC',
+	['rep'] = ' Rep',
+	['wq'] = ' Weekly',
+}
+
+---@param raid_name string raid code from raid_list, e.g. "icc25hc"
+---@return string
+function RaidBrowser.get_display_raid_name(raid_name)
+	local base, size, suffix = raid_name:match('^(.-)(%d+)(%a*)$')
+	local pretty = base and raid_display_bases[base]
+	local suffix_text = suffix and raid_display_suffixes[suffix]
+	if not pretty or not suffix_text then
+		return raid_name
+	end
+	return pretty .. ' ' .. size .. suffix_text
+end
+
+---@return table list of all raid codes (used by tests)
+function RaidBrowser.get_raid_names()
+	local names = {}
+	for _, raid in ipairs(raid_list) do
+		table.insert(names, raid.name)
+	end
+	return names
+end
+
 --[[ Event handlers and listeners ]] --
 RaidBrowserLfmChannelListeners = {
 	['CHAT_MSG_CHANNEL'] = {},
@@ -1206,9 +1260,11 @@ local function event_handler(self, event, message, sender)
 	if is_lfm_channel(event) then
 		local raid_info, roles, gs = RaidBrowser.raid_info(message)
 		if raid_info and roles and gs then
+			local previous = RaidBrowser.lfm_messages[sender];
+			local is_new = not previous or previous.raid_info.name ~= raid_info.name;
 
 			-- Put the sender in the table of active raids
-			RaidBrowser.lfm_messages[sender] = {
+			local lfm_info = {
 				raid_info = raid_info,
 				roles = roles,
 				gs = gs,
@@ -1216,6 +1272,12 @@ local function event_handler(self, event, message, sender)
 				message = message,
 				sender = sender
 			};
+			RaidBrowser.lfm_messages[sender] = lfm_info;
+
+			-- Only notify when a host starts advertising, not on every repeat.
+			if is_new then
+				RaidBrowser.settings.notify_new_raid(lfm_info);
+			end
 
 			RaidBrowser.gui.update_list_if_visible();
 		end
@@ -1228,11 +1290,12 @@ local function refresh_lfm_messages()
 	RequestRaidInfo();
 
 	local now = time();
+	local expiry_time = RaidBrowser.settings.get().expiry_time;
 	local removed = false;
 	for name, info in pairs(RaidBrowser.lfm_messages) do
 		-- If the last message from the sender was too long ago, then
 		-- remove their raid from lfm_messages.
-		if now - info.time > RaidBrowser.expiry_time then
+		if now - info.time > expiry_time then
 			RaidBrowser.lfm_messages[name] = nil;
 			removed = true;
 		end
@@ -1263,8 +1326,9 @@ function RaidBrowser:OnEnable()
 		RaidBrowserCharacterUseShortSpecNames = false;
 	end
 
-	-- LFM messages expire after 60 seconds
-	RaidBrowser.expiry_time = 60;
+	-- Filters, expiry time, notifications and hidden hosts (see settings.lua).
+	RaidBrowser.settings.initialize();
+	RaidBrowser.gui.update_filter_button();
 
 	RaidBrowser.lfm_messages = {}
 	RaidBrowser.timer = RaidBrowser.set_timer(10, refresh_lfm_messages, true)

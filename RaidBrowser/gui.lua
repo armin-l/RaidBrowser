@@ -137,10 +137,28 @@ LFRBrowseFrameRaidDropDown:Hide()
 search_button:SetText('Find Raid')
 search_button:SetScript('OnClick', function() end)
 
-local function clear_highlights()
-	for i = 1, NUM_LFR_LIST_BUTTONS do
-		_G["LFRBrowseFrameListButton" .. i]:UnlockHighlight();
+-- Tooltip handlers are shared by all list buttons instead of being recreated
+-- for every button on every list update.
+local function on_button_enter(lfr_button)
+	GameTooltip:SetOwner(lfr_button, 'ANCHOR_RIGHT');
+
+	local seconds = time() - lfr_button.lfm_info.time;
+	local last_sent = string.format('Last sent: %d seconds ago', seconds);
+	GameTooltip:AddLine(lfr_button.lfm_info.message, 1, 1, 1, true);
+	GameTooltip:AddLine(last_sent);
+
+	if lfr_button.raid_locked then
+		GameTooltip:AddLine('\nYou are |cffff0000saved|cffffd100 for ' .. lfr_button.raid_info.name);
+		GameTooltip:AddLine('Lockout expires in ' .. format_seconds(lfr_button.raid_reset_time));
+	else
+		GameTooltip:AddLine('\nYou are |cff00ffffnot saved|cffffd100 for ' .. lfr_button.raid_info.name);
 	end
+
+	GameTooltip:Show();
+end
+
+local function on_button_leave(_)
+	GameTooltip:Hide();
 end
 
 -- Assignment operator for LFR buttons
@@ -149,9 +167,7 @@ end
 ---@param lfm_info any
 ---@param index integer
 local function assign_lfr_button(button, host_name, lfm_info, index)
-	local offset = FauxScrollFrame_GetOffset(LFRBrowseFrameListScrollFrame);
 	button.index = index;
-	index = index - offset;
 
 	button.lfm_info = lfm_info;
 	button.raid_info = lfm_info.raid_info;
@@ -207,51 +223,18 @@ local function assign_lfr_button(button, host_name, lfm_info, index)
 	button.damageIcon:SetTexture("Interface\\LFGFrame\\LFGRole");
 	button.partyIcon:SetTexture("Interface\\LFGFrame\\LFGRole");
 
-button:SetScript("OnDoubleClick", on_join)
-
-	button:SetScript('OnEnter', 
-		function(lfr_button) 
-			GameTooltip:SetOwner(lfr_button, 'ANCHOR_RIGHT');
-			
-			local seconds = time() - lfr_button.lfm_info.time;
-			local last_sent = string.format('Last sent: %d seconds ago', seconds);
-			GameTooltip:AddLine(lfr_button.lfm_info.message, 1, 1, 1, true);
-			GameTooltip:AddLine(last_sent);
-
-			if lfr_button.raid_locked then
-				GameTooltip:AddLine('\nYou are |cffff0000saved|cffffd100 for ' .. lfr_button.raid_info.name);
-				GameTooltip:AddLine('Lockout expires in ' .. format_seconds(lfr_button.raid_reset_time));
-			else
-				GameTooltip:AddLine('\nYou are |cff00ffffnot saved|cffffd100 for ' .. lfr_button.raid_info.name);
-			end
-
-			GameTooltip:Show();
-		end
-	)
-
-	button:SetScript('OnLeave',
-		function(_)
-			GameTooltip:Hide();
-		end
-	)
+	button:SetScript("OnDoubleClick", on_join)
+	button:SetScript('OnEnter', on_button_enter)
+	button:SetScript('OnLeave', on_button_leave)
 end
 
 ---@param button Button
 ---@param index integer
 local function insert_lfm_button(button, index)
-	local count = 1;
-
-	local sortedMessages = get_sorted_messages()
-
-	for _, lfm_info in pairs(sortedMessages) do
-		if count == index then
-			assign_lfr_button(button, lfm_info.sender, lfm_info, index);
-			break;
-		end
-
-		count = count + 1;
+	local lfm_info = get_sorted_messages()[index];
+	if lfm_info then
+		assign_lfr_button(button, lfm_info.sender, lfm_info, index);
 	end
-
 end
 
 local function update_buttons()
@@ -259,56 +242,53 @@ local function update_buttons()
 	LFRBrowseFrameInviteButton:Enable();
 end
 
-local function clear_list()
-	for i = 1, NUM_LFR_LIST_BUTTONS do
-		local button = _G["LFRBrowseFrameListButton" .. i];
-		button:Hide();
-		button:UnlockHighlight();
-	end
-end
-
----@param t table
----@return integer
-local function table_length(t)
-	local count = 0
-	for _ in pairs(t) do count = count + 1 end
-	return count
-end
+-- The "Use short spec names" checkbox (raidset_frame.lua) covers the bottom of
+-- Blizzard's list, so only the rows above it are used. Scrolling kicks in once
+-- there are more raids than these rows.
+local NUM_VISIBLE_ROWS = math.min(NUM_LFR_LIST_BUTTONS, 17)
 
 function RaidBrowser.gui.update_list()
 	LFRBrowseFrameRefreshButton.timeUntilNextRefresh = LFR_BROWSE_AUTO_REFRESH_TIME;
 
-	local numResults = table_length(RaidBrowser.lfm_messages)
-	FauxScrollFrame_Update(LFRBrowseFrameListScrollFrame, numResults, NUM_LFR_LIST_BUTTONS, 16);
+	-- Sort once per update instead of once per visible button.
+	local sorted = get_sorted_messages()
+	local numResults = #sorted
+	FauxScrollFrame_Update(LFRBrowseFrameListScrollFrame, numResults, NUM_VISIBLE_ROWS, 16);
 
 	local offset = FauxScrollFrame_GetOffset(LFRBrowseFrameListScrollFrame);
-	clear_list();
 
-	-- Update button information
 	for i = 1, NUM_LFR_LIST_BUTTONS do
 		local button = _G["LFRBrowseFrameListButton" .. i];
-		if (i <= numResults) then
-			insert_lfm_button(button, i + offset);
+		local index = i + offset;
+		local lfm_info = i <= NUM_VISIBLE_ROWS and sorted[index] or nil;
+
+		if lfm_info then
+			assign_lfr_button(button, lfm_info.sender, lfm_info, index);
 			button:Show();
+
+			if LFRBrowseFrame.selectedName == lfm_info.sender then
+				button:LockHighlight();
+			else
+				button:UnlockHighlight();
+			end
 		else
 			button:Hide();
-		end
-	end
-
-	clear_highlights();
-
-	-- Update button highlights
-	for i = 1, NUM_LFR_LIST_BUTTONS do
-		local button = _G["LFRBrowseFrameListButton" .. i];
-		if (LFRBrowseFrame.selectedName == button.unitName) then
-			button:LockHighlight();
-		else
 			button:UnlockHighlight();
 		end
+	end
 
-		update_buttons();
+	update_buttons();
+end
+
+-- Chat parsing can trigger many updates per second; only redraw while the
+-- browser is actually on screen. The OnShow hook below catches up on open.
+function RaidBrowser.gui.update_list_if_visible()
+	if LFRBrowseFrame:IsVisible() then
+		RaidBrowser.gui.update_list();
 	end
 end
+
+LFRBrowseFrame:HookScript('OnShow', function() RaidBrowser.gui.update_list() end)
 
 -- Setup LFR browser hooks
 LFRBrowse_UpdateButtonStates = update_buttons

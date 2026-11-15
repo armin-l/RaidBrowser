@@ -693,6 +693,14 @@ local raid_list = {
 	},
 }
 
+-- Messages are lowercased before matching, so lowercase the raid patterns once
+-- here instead of on every chat message.
+for _, raid in ipairs(raid_list) do
+	for i, pattern in ipairs(raid.patterns) do
+		raid.patterns[i] = pattern:lower()
+	end
+end
+
 local role_patterns = {
 	dps = {
 
@@ -873,13 +881,15 @@ local lfg_patterns = {
 ---@return boolean
 ---@nodiscard
 local function matches_any_pattern(message, patterns, debug)
-	return std.algorithm.find_if(patterns, function(pattern)
-		local result = message:find(pattern)
-		if debug and result then
-			RaidBrowser:Print("Pattern matched: " .. pattern)
+	for _, pattern in ipairs(patterns) do
+		if message:find(pattern) then
+			if debug then
+				RaidBrowser:Print("Pattern matched: " .. pattern)
+			end
+			return true;
 		end
-		return result;
-	end) ~= nil;
+	end
+	return false;
 end
 
 ---@param message string
@@ -1013,27 +1023,22 @@ function RaidBrowser.lex_raid_info(message, debug)
 	local num_unique_raids = 0;
 	local raid_pattern_index;
 	for _, r in ipairs(raid_list) do
+		-- Patterns are pre-lowercased at load time (see raid_list setup).
 		local message_index;
-		local index = std.algorithm.find_if(r.patterns, function(pattern)
-			pattern = pattern:lower();
+		local found = false;
+		for _, pattern in ipairs(r.patterns) do
 			message_index = message:find(pattern);
-			
-			if message_index ~= nil then
-				local m, result = message:gsub(pattern, meta_raid);
-
-				if result > 0 then
-					if debug then
-						RaidBrowser:Print("Raid found! " .. r.name .. ": " .. pattern);
-					end
-					message = m;
-					return true;
+			if message_index then
+				if debug then
+					RaidBrowser:Print("Raid found! " .. r.name .. ": " .. pattern);
 				end
+				message = message:gsub(pattern, meta_raid);
+				found = true;
+				break;
 			end
+		end
 
-			return false;
-		end);
-
-		if index then
+		if found then
 			-- only count as new unique raid, if previously found raid was a different zone
 			if not raid or (RaidBrowser.get_short_raid_name(r.name) ~= RaidBrowser.get_short_raid_name(raid.name)) then
 				num_unique_raids = num_unique_raids + 1;
@@ -1065,18 +1070,17 @@ end
 ---@return string
 ---@nodiscard
 local function reduce_rolelists(message)
-	local sub_count = 0;
+	local replaced;
 
+	-- Collapse role lists ("tank and heal", "dps/heal", ...) until nothing changes.
 	repeat
-		local results = std.algorithm.transform(rolelist_patterns, function(pattern)
-			local t = { message:gsub(pattern, meta_role) };
-			message = t[1];
-			return t[2];
+		replaced = false;
+		for _, pattern in ipairs(rolelist_patterns) do
+			local count;
+			message, count = message:gsub(pattern, meta_role);
+			if count > 0 then replaced = true end
 		end
-		);
-
-		sub_count = std.algorithm.find_if(results, function(x) return x > 0 end) or 0;
-	until sub_count == 0
+	until not replaced
 
 	return message;
 end
@@ -1213,7 +1217,7 @@ local function event_handler(self, event, message, sender)
 				sender = sender
 			};
 
-			RaidBrowser.gui.update_list();
+			RaidBrowser.gui.update_list_if_visible();
 		end
 	end
 end
@@ -1223,12 +1227,20 @@ local function refresh_lfm_messages()
 	-- This is a better alternative
 	RequestRaidInfo();
 
+	local now = time();
+	local removed = false;
 	for name, info in pairs(RaidBrowser.lfm_messages) do
 		-- If the last message from the sender was too long ago, then
-		-- remove his raid from lfm_messages.
-		if time() - info.time > RaidBrowser.expiry_time then
+		-- remove their raid from lfm_messages.
+		if now - info.time > RaidBrowser.expiry_time then
 			RaidBrowser.lfm_messages[name] = nil;
+			removed = true;
 		end
+	end
+
+	-- Redraw so expired raids disappear right away, not only on the next LFM message.
+	if removed then
+		RaidBrowser.gui.update_list_if_visible();
 	end
 end
 

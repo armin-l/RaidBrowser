@@ -479,15 +479,19 @@ function RaidBrowser.stats.build_join_message(raid_name)
 	local message = 'inv for ' .. raid_name .. " - ";
 	local class = UnitClass("player");
 	
+	-- GearScore is optional: without it, still send the spec.
+	local function format_entry(spec, gs)
+		if not spec then return nil end
+		if gs then return gs .. 'gs ' .. spec end
+		return spec
+	end
+
 	local spec1, gs1, spec2, gs2 = RaidBrowser.stats.current_raidset();
-	if spec1 and gs1 then
-		message = message .. gs1 .. 'gs ' .. spec1
-	end
-	if spec1 and gs1 and spec2 and gs2 then
-		message = message .. ' / '
-	end
-	if spec2 and gs2 then
-		message = message .. gs2 .. 'gs ' .. spec2
+	local entry1, entry2 = format_entry(spec1, gs1), format_entry(spec2, gs2)
+	if entry1 and entry2 then
+		message = message .. entry1 .. ' / ' .. entry2
+	elseif entry1 or entry2 then
+		message = message .. (entry1 or entry2)
 	end
 
 	-- Remove difficulty and raid_name size from the string

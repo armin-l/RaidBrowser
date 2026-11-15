@@ -3,7 +3,7 @@
 ## Version: v1.4.0-DEV
 ## Notes: A raid finder that parses chat channel text and displays any found raids in the raid browser LFR frame.
 ## Author: Act/Horsebreed@Warmane
-## SavedVariablesPerCharacter: RaidBrowserCharacterRaidsets, RaidBrowserCharacterCurrentRaidset, RaidBrowserCharacterUseShortSpecNames
+## SavedVariablesPerCharacter: RaidBrowserCharacterRaidsets, RaidBrowserCharacterCurrentRaidset, RaidBrowserCharacterUseShortSpecNames, RaidBrowserCharacterSettings
 ## OptionalDeps: GearScoreLite
 ## X-Embeds: Ace3
 
@@ -13,5 +13,6 @@ core.lua
 event.lua
 timer.lua
 stats.lua
+settings.lua
 gui.lua
 raidset_frame.lua

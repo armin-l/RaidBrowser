@@ -547,7 +547,7 @@ local raid_list = {
 
 	{
 		name = 'hyjal25',
-		instace_name = 'The Battle For Mount Hyjal',
+		instance_name = 'The Battle For Mount Hyjal',
 		size = 25,
 		patterns = {
 			'mount' .. csep .. 'hyjal',
@@ -692,6 +692,14 @@ local raid_list = {
 		},
 	},
 }
+
+-- Messages are lowercased before matching, so lowercase the raid patterns once
+-- here instead of on every chat message.
+for _, raid in ipairs(raid_list) do
+	for i, pattern in ipairs(raid.patterns) do
+		raid.patterns[i] = pattern:lower()
+	end
+end
 
 local role_patterns = {
 	dps = {
@@ -873,13 +881,15 @@ local lfg_patterns = {
 ---@return boolean
 ---@nodiscard
 local function matches_any_pattern(message, patterns, debug)
-	return std.algorithm.find_if(patterns, function(pattern)
-		local result = message:find(pattern)
-		if debug and result then
-			RaidBrowser:Print("Pattern matched: " .. pattern)
+	for _, pattern in ipairs(patterns) do
+		if message:find(pattern) then
+			if debug then
+				RaidBrowser:Print("Pattern matched: " .. pattern)
+			end
+			return true;
 		end
-		return result;
-	end) ~= nil;
+	end
+	return false;
 end
 
 ---@param message string
@@ -1013,27 +1023,22 @@ function RaidBrowser.lex_raid_info(message, debug)
 	local num_unique_raids = 0;
 	local raid_pattern_index;
 	for _, r in ipairs(raid_list) do
+		-- Patterns are pre-lowercased at load time (see raid_list setup).
 		local message_index;
-		local index = std.algorithm.find_if(r.patterns, function(pattern)
-			pattern = pattern:lower();
+		local found = false;
+		for _, pattern in ipairs(r.patterns) do
 			message_index = message:find(pattern);
-			
-			if message_index ~= nil then
-				local m, result = message:gsub(pattern, meta_raid);
-
-				if result > 0 then
-					if debug then
-						RaidBrowser:Print("Raid found! " .. r.name .. ": " .. pattern);
-					end
-					message = m;
-					return true;
+			if message_index then
+				if debug then
+					RaidBrowser:Print("Raid found! " .. r.name .. ": " .. pattern);
 				end
+				message = message:gsub(pattern, meta_raid);
+				found = true;
+				break;
 			end
+		end
 
-			return false;
-		end);
-
-		if index then
+		if found then
 			-- only count as new unique raid, if previously found raid was a different zone
 			if not raid or (RaidBrowser.get_short_raid_name(r.name) ~= RaidBrowser.get_short_raid_name(raid.name)) then
 				num_unique_raids = num_unique_raids + 1;
@@ -1065,18 +1070,17 @@ end
 ---@return string
 ---@nodiscard
 local function reduce_rolelists(message)
-	local sub_count = 0;
+	local replaced;
 
+	-- Collapse role lists ("tank and heal", "dps/heal", ...) until nothing changes.
 	repeat
-		local results = std.algorithm.transform(rolelist_patterns, function(pattern)
-			local t = { message:gsub(pattern, meta_role) };
-			message = t[1];
-			return t[2];
+		replaced = false;
+		for _, pattern in ipairs(rolelist_patterns) do
+			local count;
+			message, count = message:gsub(pattern, meta_role);
+			if count > 0 then replaced = true end
 		end
-		);
-
-		sub_count = std.algorithm.find_if(results, function(x) return x > 0 end) or 0;
-	until sub_count == 0
+	until not replaced
 
 	return message;
 end
@@ -1177,6 +1181,60 @@ function RaidBrowser.get_short_raid_name(raid_name)
 	return string.gsub(raid_name, '[1|2][0|5](%w*)', '');
 end
 
+-- Readable short names for the raid codes in raid_list, e.g. icc25hc -> "ICC 25 HC".
+local raid_display_bases = {
+	['icc'] = 'ICC',
+	['toc'] = 'ToC',
+	['rs'] = 'RS',
+	['voa'] = 'VoA',
+	['ulduar'] = 'Uld',
+	['os'] = 'OS',
+	['naxx'] = 'Naxx',
+	['eoe'] = 'EoE',
+	['onyxia'] = 'Ony',
+	['hyjal'] = 'Hyjal',
+	['zul\'aman'] = 'ZA',
+	['tempest keep'] = 'TK',
+	['karazhan'] = 'Kara',
+	['mag\'s lair'] = 'Mag',
+	['gruul\'s lair'] = 'Gruul',
+	['bwl'] = 'BWL',
+	['molten core'] = 'MC',
+	['black temple'] = 'BT',
+	['sunwell'] = 'SWP',
+	['ssc'] = 'SSC',
+	['aq'] = 'AQ',
+}
+
+local raid_display_suffixes = {
+	[''] = '',
+	['nm'] = '',
+	['hc'] = ' HC',
+	['rep'] = ' Rep',
+	['wq'] = ' Weekly',
+}
+
+---@param raid_name string raid code from raid_list, e.g. "icc25hc"
+---@return string
+function RaidBrowser.get_display_raid_name(raid_name)
+	local base, size, suffix = raid_name:match('^(.-)(%d+)(%a*)$')
+	local pretty = base and raid_display_bases[base]
+	local suffix_text = suffix and raid_display_suffixes[suffix]
+	if not pretty or not suffix_text then
+		return raid_name
+	end
+	return pretty .. ' ' .. size .. suffix_text
+end
+
+---@return table list of all raid codes (used by tests)
+function RaidBrowser.get_raid_names()
+	local names = {}
+	for _, raid in ipairs(raid_list) do
+		table.insert(names, raid.name)
+	end
+	return names
+end
+
 --[[ Event handlers and listeners ]] --
 RaidBrowserLfmChannelListeners = {
 	['CHAT_MSG_CHANNEL'] = {},
@@ -1202,9 +1260,11 @@ local function event_handler(self, event, message, sender)
 	if is_lfm_channel(event) then
 		local raid_info, roles, gs = RaidBrowser.raid_info(message)
 		if raid_info and roles and gs then
+			local previous = RaidBrowser.lfm_messages[sender];
+			local is_new = not previous or previous.raid_info.name ~= raid_info.name;
 
 			-- Put the sender in the table of active raids
-			RaidBrowser.lfm_messages[sender] = {
+			local lfm_info = {
 				raid_info = raid_info,
 				roles = roles,
 				gs = gs,
@@ -1212,8 +1272,14 @@ local function event_handler(self, event, message, sender)
 				message = message,
 				sender = sender
 			};
+			RaidBrowser.lfm_messages[sender] = lfm_info;
 
-			RaidBrowser.gui.update_list();
+			-- Only notify when a host starts advertising, not on every repeat.
+			if is_new then
+				RaidBrowser.settings.notify_new_raid(lfm_info);
+			end
+
+			RaidBrowser.gui.update_list_if_visible();
 		end
 	end
 end
@@ -1223,12 +1289,21 @@ local function refresh_lfm_messages()
 	-- This is a better alternative
 	RequestRaidInfo();
 
+	local now = time();
+	local expiry_time = RaidBrowser.settings.get().expiry_time;
+	local removed = false;
 	for name, info in pairs(RaidBrowser.lfm_messages) do
 		-- If the last message from the sender was too long ago, then
-		-- remove his raid from lfm_messages.
-		if time() - info.time > RaidBrowser.expiry_time then
+		-- remove their raid from lfm_messages.
+		if now - info.time > expiry_time then
 			RaidBrowser.lfm_messages[name] = nil;
+			removed = true;
 		end
+	end
+
+	-- Redraw so expired raids disappear right away, not only on the next LFM message.
+	if removed then
+		RaidBrowser.gui.update_list_if_visible();
 	end
 end
 
@@ -1251,22 +1326,24 @@ function RaidBrowser:OnEnable()
 		RaidBrowserCharacterUseShortSpecNames = false;
 	end
 
-	-- LFM messages expire after 60 seconds
-	RaidBrowser.expiry_time = 60;
+	-- Filters, expiry time, notifications and hidden hosts (see settings.lua).
+	RaidBrowser.settings.initialize();
+	RaidBrowser.gui.update_filter_button();
 
 	RaidBrowser.lfm_messages = {}
 	RaidBrowser.timer = RaidBrowser.set_timer(10, refresh_lfm_messages, true)
 	for channel, _ in pairs(RaidBrowserLfmChannelListeners) do
-		table.insert(channel_listeners, RaidBrowser.add_event_listener(channel, event_handler))
+		channel_listeners[channel] = RaidBrowser.add_event_listener(channel, event_handler)
 	end
 
-	RaidBrowser.check_button()
+	-- Restores the saved raidset selection and syncs the save button with it.
 	RaidBrowser.gui.raidset.initialize();
 end
 
 function RaidBrowser:OnDisable()
-	for channel, listener in pairs(RaidBrowserLfmChannelListeners) do
+	for channel, listener in pairs(channel_listeners) do
 		RaidBrowser.remove_event_listener(channel, listener)
+		channel_listeners[channel] = nil
 	end
 
 	RaidBrowser.kill_timer(RaidBrowser.timer)
